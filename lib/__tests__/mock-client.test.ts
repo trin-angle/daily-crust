@@ -66,6 +66,16 @@ describe("MockDruidClient", () => {
     }
   });
 
+  it("getClusterStatus accepts optional region", async () => {
+    const status = await client.getClusterStatus("osd-prod-gew1");
+    expect(status.clusterName).toBe("druid-prod-01");
+  });
+
+  it("getActiveTasks accepts optional region", async () => {
+    const tasks = await client.getActiveTasks("osd-prod-guc3");
+    expect(Array.isArray(tasks)).toBe(true);
+  });
+
   it("getWeeklyReport returns a complete report", async () => {
     const range = {
       start: "2026-02-05T00:00:00Z",

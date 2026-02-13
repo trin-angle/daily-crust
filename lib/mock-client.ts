@@ -8,6 +8,7 @@ import type {
   WeeklyReport,
   TopPerformer,
   Bottleneck,
+  DruidRegion,
 } from "./types";
 import type { DruidMCPClient } from "./mcp-client";
 
@@ -29,7 +30,7 @@ const DATASOURCES = [
 ];
 
 export class MockDruidClient implements DruidMCPClient {
-  async getClusterStatus(): Promise<ClusterStatus> {
+  async getClusterStatus(_region?: DruidRegion): Promise<ClusterStatus> {
     const serverCount = 12;
     const healthyCount = Math.random() > 0.1 ? serverCount : serverCount - 1;
     return {
@@ -41,7 +42,7 @@ export class MockDruidClient implements DruidMCPClient {
     };
   }
 
-  async getActiveTasks(): Promise<Task[]> {
+  async getActiveTasks(_region?: DruidRegion): Promise<Task[]> {
     const count = randInt(2, 5);
     return Array.from({ length: count }, (_, i) => ({
       taskId: `index_${DATASOURCES[i % DATASOURCES.length]}_${new Date().toISOString().slice(0, 10)}`,
@@ -54,7 +55,7 @@ export class MockDruidClient implements DruidMCPClient {
     }));
   }
 
-  async getQueryMetrics(range: DateRange): Promise<QueryMetrics> {
+  async getQueryMetrics(range: DateRange, _region?: DruidRegion): Promise<QueryMetrics> {
     const total = randInt(80000, 120000);
     const failed = randInt(20, 100);
     return {
@@ -67,7 +68,7 @@ export class MockDruidClient implements DruidMCPClient {
     };
   }
 
-  async getSegmentHealth(): Promise<SegmentHealth[]> {
+  async getSegmentHealth(_region?: DruidRegion): Promise<SegmentHealth[]> {
     return DATASOURCES.slice(0, 4).map((ds) => {
       const segCount = randInt(50, 800);
       const totalSize = randInt(500_000_000, 5_000_000_000);
@@ -88,7 +89,7 @@ export class MockDruidClient implements DruidMCPClient {
     });
   }
 
-  async getQueryVelocity(): Promise<QpsPoint[]> {
+  async getQueryVelocity(_region?: DruidRegion): Promise<QpsPoint[]> {
     const now = Date.now();
     return Array.from({ length: 20 }, (_, i) => ({
       timestamp: new Date(now - (19 - i) * 15000).toISOString(),
@@ -96,7 +97,7 @@ export class MockDruidClient implements DruidMCPClient {
     }));
   }
 
-  async getWeeklyReport(range: DateRange): Promise<WeeklyReport> {
+  async getWeeklyReport(range: DateRange, _region?: DruidRegion): Promise<WeeklyReport> {
     const metrics = await this.getQueryMetrics(range);
     const reliability = parseFloat(
       ((metrics.successfulQueries / metrics.totalQueries) * 100).toFixed(2)
