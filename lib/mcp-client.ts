@@ -9,6 +9,7 @@ import type {
   DruidRegion,
 } from "./types";
 import { MockDruidClient } from "./mock-client";
+import { LiveDruidClient } from "./live-client";
 
 export interface DruidMCPClient {
   getClusterStatus(region?: DruidRegion): Promise<ClusterStatus>;
@@ -24,7 +25,10 @@ export function createMCPClient(mode?: string): DruidMCPClient {
   if (resolvedMode === "mock") {
     return new MockDruidClient();
   }
+  if (resolvedMode === "live") {
+    return new LiveDruidClient();
+  }
   throw new Error(
-    `Unknown MCP_MODE: ${resolvedMode}. Only "mock" is currently supported.`
+    `Unknown MCP_MODE: ${resolvedMode}. Supported: "mock", "live".`
   );
 }

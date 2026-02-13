@@ -76,6 +76,11 @@ describe("MockDruidClient", () => {
     expect(Array.isArray(tasks)).toBe(true);
   });
 
+  it("createMCPClient('live') returns a LiveDruidClient", () => {
+    const client = createMCPClient("live");
+    expect(client).toBeDefined();
+  });
+
   it("getWeeklyReport returns a complete report", async () => {
     const range = {
       start: "2026-02-05T00:00:00Z",
