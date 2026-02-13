@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { MetricTile } from "@/components/MetricTile";
 import { QpsChart } from "@/components/QpsChart";
 import { IngestionList } from "@/components/IngestionList";
-import type { ClusterStatus, Task, QpsPoint } from "@/lib/types";
+import { RegionSelector } from "@/components/RegionSelector";
+import type { ClusterStatus, Task, QpsPoint, DruidRegion } from "@/lib/types";
 
 const POLL_INTERVAL = 15000;
 
@@ -20,19 +21,21 @@ export default function DashboardPage() {
   const [qps, setQps] = useState<QpsPoint[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [region, setRegion] = useState<DruidRegion>("all");
 
   const fetchData = useCallback(async () => {
+    const params = region !== "all" ? `?region=${region}` : "";
     const [statusRes, tasksRes, qpsRes] = await Promise.all([
-      fetch("/api/cluster/status"),
-      fetch("/api/cluster/tasks"),
-      fetch("/api/cluster/qps"),
+      fetch(`/api/cluster/status${params}`),
+      fetch(`/api/cluster/tasks${params}`),
+      fetch(`/api/cluster/qps${params}`),
     ]);
     setStatus(await statusRes.json());
     setTasks(await tasksRes.json());
     setQps(await qpsRes.json());
     setLastUpdated(new Date());
     setSecondsAgo(0);
-  }, []);
+  }, [region]);
 
   useEffect(() => {
     fetchData();
@@ -52,6 +55,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold">Live Dashboard</h2>
+        <RegionSelector selected={region} onSelect={setRegion} />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricTile
           label="Uptime"
