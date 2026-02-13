@@ -6,16 +6,17 @@ import type {
   QpsPoint,
   DateRange,
   WeeklyReport,
+  DruidRegion,
 } from "./types";
 import { MockDruidClient } from "./mock-client";
 
 export interface DruidMCPClient {
-  getClusterStatus(): Promise<ClusterStatus>;
-  getActiveTasks(): Promise<Task[]>;
-  getQueryMetrics(range: DateRange): Promise<QueryMetrics>;
-  getSegmentHealth(): Promise<SegmentHealth[]>;
-  getQueryVelocity(): Promise<QpsPoint[]>;
-  getWeeklyReport(range: DateRange): Promise<WeeklyReport>;
+  getClusterStatus(region?: DruidRegion): Promise<ClusterStatus>;
+  getActiveTasks(region?: DruidRegion): Promise<Task[]>;
+  getQueryMetrics(range: DateRange, region?: DruidRegion): Promise<QueryMetrics>;
+  getSegmentHealth(region?: DruidRegion): Promise<SegmentHealth[]>;
+  getQueryVelocity(region?: DruidRegion): Promise<QpsPoint[]>;
+  getWeeklyReport(range: DateRange, region?: DruidRegion): Promise<WeeklyReport>;
 }
 
 export function createMCPClient(mode?: string): DruidMCPClient {

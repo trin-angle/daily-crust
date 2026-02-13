@@ -8,6 +8,7 @@ import type {
   QpsPoint,
   DateRange,
   WeeklyReport,
+  DruidRegion,
 } from "../types";
 
 describe("types", () => {
@@ -98,5 +99,27 @@ describe("types", () => {
       segmentHealth: [],
     };
     expect(report.reliabilityScore).toBe(99.94);
+  });
+
+  it("DruidRegion accepts valid region strings", () => {
+    const regions: DruidRegion[] = [
+      "osd-prod-gew1",
+      "osd-prod-guc3",
+      "osd-prod-gae2",
+      "all",
+    ];
+    expect(regions).toHaveLength(4);
+  });
+
+  it("ClusterStatus includes optional region", () => {
+    const status: ClusterStatus = {
+      clusterName: "druid-prod-01",
+      uptimePercent: 99.97,
+      serverCount: 12,
+      healthyServerCount: 12,
+      timestamp: new Date().toISOString(),
+      region: "osd-prod-gew1",
+    };
+    expect(status.region).toBe("osd-prod-gew1");
   });
 });
