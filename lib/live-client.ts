@@ -11,25 +11,29 @@ import type {
   Bottleneck,
 } from "./types";
 import type { DruidMCPClient } from "./mcp-client";
-import { HolocronGrpcClient } from "./grpc-client";
+import { DruidHttpClient } from "./druid-http-client";
 
 interface LiveClientConfig {
-  holocronHost?: string;
+  druidUrl?: string;
+  username?: string;
+  password?: string;
 }
 
 export class LiveDruidClient implements DruidMCPClient {
-  private grpc: HolocronGrpcClient;
+  private druid: DruidHttpClient;
 
   constructor(config?: LiveClientConfig) {
-    const host =
-      config?.holocronHost ??
-      process.env.HOLOCRON_PROXY_HOST ??
-      "holocron-proxy-service:50051";
-    this.grpc = new HolocronGrpcClient({ host });
+    const url =
+      config?.druidUrl ??
+      process.env.DRUID_URL ??
+      "http://localhost:8888";
+    const username = config?.username ?? process.env.DRUID_USERNAME;
+    const password = config?.password ?? process.env.DRUID_PASSWORD;
+    this.druid = new DruidHttpClient({ url, username, password });
   }
 
   async getClusterStatus(_region?: DruidRegion): Promise<ClusterStatus> {
-    const rows = await this.grpc.query(
+    const rows = await this.druid.query(
       `SELECT server, server_type, curr_size, max_size FROM sys.servers`
     );
 
@@ -45,7 +49,7 @@ export class LiveDruidClient implements DruidMCPClient {
         : 0;
 
     return {
-      clusterName: "holocron-proxy",
+      clusterName: "osd-dev-gew4",
       uptimePercent,
       serverCount,
       healthyServerCount,
@@ -54,7 +58,7 @@ export class LiveDruidClient implements DruidMCPClient {
   }
 
   async getActiveTasks(_region?: DruidRegion): Promise<Task[]> {
-    const rows = await this.grpc.query(
+    const rows = await this.druid.query(
       `SELECT task_id, datasource, status, created_time, duration, error_msg FROM sys.tasks WHERE status = 'RUNNING' ORDER BY created_time DESC`
     );
 
@@ -73,7 +77,7 @@ export class LiveDruidClient implements DruidMCPClient {
     range: DateRange,
     _region?: DruidRegion
   ): Promise<QueryMetrics> {
-    const rows = await this.grpc.query(
+    const rows = await this.druid.query(
       `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) as successful, SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed, AVG(duration) as avg_duration FROM sys.tasks WHERE created_time >= '${range.start}' AND created_time <= '${range.end}'`
     );
     const r = rows[0] ?? { total: 0, successful: 0, failed: 0, avg_duration: 0 };
@@ -89,7 +93,7 @@ export class LiveDruidClient implements DruidMCPClient {
   }
 
   async getSegmentHealth(_region?: DruidRegion): Promise<SegmentHealth[]> {
-    const rows = await this.grpc.query(
+    const rows = await this.druid.query(
       `SELECT datasource, COUNT(*) as segment_count, SUM("size") as total_size FROM sys.segments WHERE is_active = 1 GROUP BY datasource ORDER BY total_size DESC`
     );
 
@@ -174,7 +178,7 @@ export class LiveDruidClient implements DruidMCPClient {
           };
 
     return {
-      clusterName: "holocron-proxy",
+      clusterName: "osd-dev-gew4",
       dateRange: range,
       reliabilityScore: reliability,
       queryMetrics: metrics,

@@ -3,8 +3,8 @@ import { LiveDruidClient } from "../live-client";
 
 const mockQuery = vi.fn();
 
-vi.mock("../grpc-client", () => ({
-  HolocronGrpcClient: vi.fn().mockImplementation(() => ({
+vi.mock("../druid-http-client", () => ({
+  DruidHttpClient: vi.fn().mockImplementation(() => ({
     query: mockQuery,
   })),
 }));
@@ -31,7 +31,7 @@ describe("LiveDruidClient", () => {
 
     expect(status.serverCount).toBe(3);
     expect(status.healthyServerCount).toBe(3);
-    expect(status.clusterName).toContain("holocron");
+    expect(status.clusterName).toBeDefined();
     expect(status.timestamp).toBeDefined();
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("sys.servers")
@@ -133,7 +133,7 @@ describe("LiveDruidClient", () => {
     expect(report.segmentHealth).toHaveLength(1);
   });
 
-  it("rejects when gRPC query fails", async () => {
+  it("rejects when query fails", async () => {
     mockQuery.mockRejectedValue(new Error("connection refused"));
 
     const client = new LiveDruidClient();
