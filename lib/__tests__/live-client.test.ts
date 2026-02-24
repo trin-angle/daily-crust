@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { LiveDruidClient } from "../live-client";
 
-const mockQuery = vi.fn();
+const mockCallTool = vi.fn();
 
-vi.mock("../druid-http-client", () => ({
-  DruidHttpClient: vi.fn().mockImplementation(() => ({
-    query: mockQuery,
+vi.mock("../druid-mcp-http-client", () => ({
+  DruidMcpHttpClient: vi.fn().mockImplementation(() => ({
+    callTool: mockCallTool,
   })),
 }));
 
@@ -19,8 +19,8 @@ describe("LiveDruidClient", () => {
     expect(client).toBeDefined();
   });
 
-  it("getClusterStatus queries sys.servers and maps result", async () => {
-    mockQuery.mockResolvedValue([
+  it("getClusterStatus queries sys.servers via MCP and maps result", async () => {
+    mockCallTool.mockResolvedValue([
       { server: "hist1:8083", server_type: "historical", curr_size: 100, max_size: 200 },
       { server: "hist2:8083", server_type: "historical", curr_size: 100, max_size: 200 },
       { server: "broker1:8082", server_type: "broker", curr_size: 0, max_size: 0 },
@@ -33,13 +33,14 @@ describe("LiveDruidClient", () => {
     expect(status.healthyServerCount).toBe(3);
     expect(status.clusterName).toBeDefined();
     expect(status.timestamp).toBeDefined();
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining("sys.servers")
+    expect(mockCallTool).toHaveBeenCalledWith(
+      "queryDruidSql",
+      { sqlQuery: expect.stringContaining("sys.servers") }
     );
   });
 
-  it("getActiveTasks queries sys.tasks for RUNNING", async () => {
-    mockQuery.mockResolvedValue([
+  it("getActiveTasks queries sys.tasks for RUNNING via MCP", async () => {
+    mockCallTool.mockResolvedValue([
       {
         task_id: "index_wiki_2026-02-23",
         datasource: "wiki_edits",
@@ -57,13 +58,14 @@ describe("LiveDruidClient", () => {
     expect(tasks[0].taskId).toBe("index_wiki_2026-02-23");
     expect(tasks[0].datasource).toBe("wiki_edits");
     expect(tasks[0].status).toBe("RUNNING");
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining("RUNNING")
+    expect(mockCallTool).toHaveBeenCalledWith(
+      "queryDruidSql",
+      { sqlQuery: expect.stringContaining("RUNNING") }
     );
   });
 
-  it("getSegmentHealth queries sys.segments grouped by datasource", async () => {
-    mockQuery.mockResolvedValue([
+  it("getSegmentHealth queries sys.segments grouped by datasource via MCP", async () => {
+    mockCallTool.mockResolvedValue([
       { datasource: "wiki_edits", segment_count: 200, total_size: 2000000000 },
     ]);
 
@@ -78,8 +80,8 @@ describe("LiveDruidClient", () => {
     expect(segments[0].needsCompaction).toBe(true);
   });
 
-  it("getQueryMetrics queries sys.tasks for date range", async () => {
-    mockQuery.mockResolvedValue([
+  it("getQueryMetrics queries sys.tasks for date range via MCP", async () => {
+    mockCallTool.mockResolvedValue([
       { total: 100, successful: 95, failed: 5, avg_duration: 500 },
     ]);
 
@@ -94,7 +96,7 @@ describe("LiveDruidClient", () => {
     expect(metrics.failedQueries).toBe(5);
   });
 
-  it("getQueryVelocity returns empty array (no sys table for QPS)", async () => {
+  it("getQueryVelocity returns empty array", async () => {
     const client = new LiveDruidClient();
     const points = await client.getQueryVelocity();
 
@@ -103,15 +105,15 @@ describe("LiveDruidClient", () => {
 
   it("getWeeklyReport aggregates metrics, segments, and tasks", async () => {
     // First call: getQueryMetrics
-    mockQuery.mockResolvedValueOnce([
+    mockCallTool.mockResolvedValueOnce([
       { total: 100, successful: 95, failed: 5, avg_duration: 500 },
     ]);
     // Second call: getSegmentHealth
-    mockQuery.mockResolvedValueOnce([
+    mockCallTool.mockResolvedValueOnce([
       { datasource: "wiki_edits", segment_count: 200, total_size: 2000000000 },
     ]);
     // Third call: getActiveTasks
-    mockQuery.mockResolvedValueOnce([
+    mockCallTool.mockResolvedValueOnce([
       {
         task_id: "index_wiki",
         datasource: "wiki_edits",
@@ -133,8 +135,8 @@ describe("LiveDruidClient", () => {
     expect(report.segmentHealth).toHaveLength(1);
   });
 
-  it("rejects when query fails", async () => {
-    mockQuery.mockRejectedValue(new Error("connection refused"));
+  it("rejects when MCP call fails", async () => {
+    mockCallTool.mockRejectedValue(new Error("connection refused"));
 
     const client = new LiveDruidClient();
     await expect(client.getClusterStatus()).rejects.toThrow(

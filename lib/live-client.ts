@@ -11,29 +11,29 @@ import type {
   Bottleneck,
 } from "./types";
 import type { DruidMCPClient } from "./mcp-client";
-import { DruidHttpClient } from "./druid-http-client";
+import { DruidMcpHttpClient } from "./druid-mcp-http-client";
 
 interface LiveClientConfig {
-  druidUrl?: string;
-  username?: string;
-  password?: string;
+  mcpUrl?: string;
 }
 
 export class LiveDruidClient implements DruidMCPClient {
-  private druid: DruidHttpClient;
+  private mcp: DruidMcpHttpClient;
 
   constructor(config?: LiveClientConfig) {
     const url =
-      config?.druidUrl ??
-      process.env.DRUID_URL ??
-      "http://localhost:8888";
-    const username = config?.username ?? process.env.DRUID_USERNAME;
-    const password = config?.password ?? process.env.DRUID_PASSWORD;
-    this.druid = new DruidHttpClient({ url, username, password });
+      config?.mcpUrl ??
+      process.env.DRUID_MCP_URL ??
+      "http://localhost:9090/mcp";
+    this.mcp = new DruidMcpHttpClient({ url });
+  }
+
+  private async sql(query: string): Promise<any[]> {
+    return this.mcp.callTool("queryDruidSql", { sqlQuery: query });
   }
 
   async getClusterStatus(_region?: DruidRegion): Promise<ClusterStatus> {
-    const rows = await this.druid.query(
+    const rows = await this.sql(
       `SELECT server, server_type, curr_size, max_size FROM sys.servers`
     );
 
@@ -58,7 +58,7 @@ export class LiveDruidClient implements DruidMCPClient {
   }
 
   async getActiveTasks(_region?: DruidRegion): Promise<Task[]> {
-    const rows = await this.druid.query(
+    const rows = await this.sql(
       `SELECT task_id, datasource, status, created_time, duration, error_msg FROM sys.tasks WHERE status = 'RUNNING' ORDER BY created_time DESC`
     );
 
@@ -77,7 +77,7 @@ export class LiveDruidClient implements DruidMCPClient {
     range: DateRange,
     _region?: DruidRegion
   ): Promise<QueryMetrics> {
-    const rows = await this.druid.query(
+    const rows = await this.sql(
       `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) as successful, SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed, AVG(duration) as avg_duration FROM sys.tasks WHERE created_time >= '${range.start}' AND created_time <= '${range.end}'`
     );
     const r = rows[0] ?? { total: 0, successful: 0, failed: 0, avg_duration: 0 };
@@ -93,7 +93,7 @@ export class LiveDruidClient implements DruidMCPClient {
   }
 
   async getSegmentHealth(_region?: DruidRegion): Promise<SegmentHealth[]> {
-    const rows = await this.druid.query(
+    const rows = await this.sql(
       `SELECT datasource, COUNT(*) as segment_count, SUM("size") as total_size FROM sys.segments WHERE is_active = 1 GROUP BY datasource ORDER BY total_size DESC`
     );
 
