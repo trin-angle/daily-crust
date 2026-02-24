@@ -11,31 +11,27 @@ import type {
   Bottleneck,
 } from "./types";
 import type { DruidMCPClient } from "./mcp-client";
-import { DruidMcpHttpClient } from "./druid-mcp-http-client";
+import type { ClusterConfig } from "./region-config";
+import { DruidHttpClient } from "./druid-http-client";
 import { PrometheusClient } from "./prometheus-client";
 
-interface LiveClientConfig {
-  mcpUrl?: string;
-  prometheusUrl?: string;
-}
-
 export class LiveDruidClient implements DruidMCPClient {
-  private mcp: DruidMcpHttpClient;
+  private druid: DruidHttpClient;
   private prom: PrometheusClient;
+  private clusterName: string;
 
-  constructor(config?: LiveClientConfig) {
-    const mcpUrl =
-      config?.mcpUrl ??
-      process.env.DRUID_MCP_URL ??
-      "http://localhost:9090/mcp";
-    this.mcp = new DruidMcpHttpClient({ url: mcpUrl });
-    this.prom = new PrometheusClient({
-      url: config?.prometheusUrl ?? process.env.PROMETHEUS_URL ?? "http://localhost:9092",
+  constructor(config: ClusterConfig) {
+    this.clusterName = config.clusterName;
+    this.druid = new DruidHttpClient({
+      url: config.druidUrl,
+      username: config.druidUsername,
+      password: config.druidPassword,
     });
+    this.prom = new PrometheusClient({ url: config.prometheusUrl });
   }
 
   private async sql(query: string): Promise<any[]> {
-    return this.mcp.callTool("queryDruidSql", { sqlQuery: query });
+    return this.druid.query(query);
   }
 
   async getClusterStatus(_region?: DruidRegion): Promise<ClusterStatus> {
@@ -55,7 +51,7 @@ export class LiveDruidClient implements DruidMCPClient {
         : 0;
 
     return {
-      clusterName: "osd-dev-gew4",
+      clusterName: this.clusterName,
       uptimePercent,
       serverCount,
       healthyServerCount,
@@ -203,7 +199,7 @@ export class LiveDruidClient implements DruidMCPClient {
           };
 
     return {
-      clusterName: "osd-dev-gew4",
+      clusterName: this.clusterName,
       dateRange: range,
       reliabilityScore: reliability,
       queryMetrics: metrics,

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createMCPClient } from "@/lib/mcp-client";
-import type { DruidRegion } from "@/lib/types";
+import type { DruidProduct, DruidRegion } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
+  const product = request.nextUrl.searchParams.get("product") as DruidProduct | null;
   const region = request.nextUrl.searchParams.get("region") as DruidRegion | null;
-  const client = createMCPClient();
-  const status = await client.getClusterStatus(region ?? undefined);
+  const client = createMCPClient(undefined, product ?? undefined, region ?? undefined);
+  const status = await client.getClusterStatus();
   return NextResponse.json(status);
 }
