@@ -67,18 +67,13 @@ describe("MockDruidClient", () => {
   });
 
   it("getClusterStatus accepts optional region", async () => {
-    const status = await client.getClusterStatus("osd-prod-gew1");
+    const status = await client.getClusterStatus("gew1");
     expect(status.clusterName).toBe("druid-prod-01");
   });
 
   it("getActiveTasks accepts optional region", async () => {
-    const tasks = await client.getActiveTasks("osd-prod-guc3");
+    const tasks = await client.getActiveTasks("guc3");
     expect(Array.isArray(tasks)).toBe(true);
-  });
-
-  it("createMCPClient('live') returns a LiveDruidClient", () => {
-    const client = createMCPClient("live");
-    expect(client).toBeDefined();
   });
 
   it("getWeeklyReport returns a complete report", async () => {

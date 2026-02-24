@@ -1,4 +1,10 @@
-export type DruidRegion = "osd-prod-gew1" | "osd-prod-guc3" | "osd-prod-gae2" | "all";
+export type DruidProduct = "music" | "podcast";
+export type DruidRegion = "gew1" | "guc3" | "gew4" | "all";
+
+export interface ClusterTarget {
+  product: DruidProduct;
+  region: DruidRegion;
+}
 
 export interface DateRange {
   start: string;

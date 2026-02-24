@@ -9,6 +9,8 @@ import type {
   DateRange,
   WeeklyReport,
   DruidRegion,
+  DruidProduct,
+  ClusterTarget,
 } from "../types";
 
 describe("types", () => {
@@ -102,13 +104,19 @@ describe("types", () => {
   });
 
   it("DruidRegion accepts valid region strings", () => {
-    const regions: DruidRegion[] = [
-      "osd-prod-gew1",
-      "osd-prod-guc3",
-      "osd-prod-gae2",
-      "all",
-    ];
+    const regions: DruidRegion[] = ["gew1", "guc3", "gew4", "all"];
     expect(regions).toHaveLength(4);
+  });
+
+  it("DruidProduct accepts valid product strings", () => {
+    const products: DruidProduct[] = ["music", "podcast"];
+    expect(products).toHaveLength(2);
+  });
+
+  it("ClusterTarget satisfies shape", () => {
+    const target: ClusterTarget = { product: "music", region: "gew1" };
+    expect(target.product).toBe("music");
+    expect(target.region).toBe("gew1");
   });
 
   it("ClusterStatus includes optional region", () => {
@@ -118,8 +126,8 @@ describe("types", () => {
       serverCount: 12,
       healthyServerCount: 12,
       timestamp: new Date().toISOString(),
-      region: "osd-prod-gew1",
+      region: "gew1",
     };
-    expect(status.region).toBe("osd-prod-gew1");
+    expect(status.region).toBe("gew1");
   });
 });

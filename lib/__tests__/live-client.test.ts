@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { LiveDruidClient } from "../live-client";
 
-const mockCallTool = vi.fn();
+const mockQuery = vi.fn();
 const mockScalarValue = vi.fn();
 const mockRangeQuery = vi.fn();
 
-vi.mock("../druid-mcp-http-client", () => ({
-  DruidMcpHttpClient: vi.fn().mockImplementation(() => ({
-    callTool: mockCallTool,
+vi.mock("../druid-http-client", () => ({
+  DruidHttpClient: vi.fn().mockImplementation(() => ({
+    query: mockQuery,
   })),
 }));
 
@@ -18,38 +18,45 @@ vi.mock("../prometheus-client", () => ({
   })),
 }));
 
+const TEST_CONFIG = {
+  clusterName: "osd-prod-gew1",
+  druidUrl: "http://localhost:9100",
+  druidUsername: "druid",
+  druidPassword: "druid",
+  prometheusUrl: "http://localhost:9101",
+};
+
 describe("LiveDruidClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("constructs with default config", () => {
-    const client = new LiveDruidClient();
+  it("constructs with config", () => {
+    const client = new LiveDruidClient(TEST_CONFIG);
     expect(client).toBeDefined();
   });
 
-  it("getClusterStatus queries sys.servers via MCP and maps result", async () => {
-    mockCallTool.mockResolvedValue([
+  it("getClusterStatus queries sys.servers and maps result", async () => {
+    mockQuery.mockResolvedValue([
       { server: "hist1:8083", server_type: "historical", curr_size: 100, max_size: 200 },
       { server: "hist2:8083", server_type: "historical", curr_size: 100, max_size: 200 },
       { server: "broker1:8082", server_type: "broker", curr_size: 0, max_size: 0 },
     ]);
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     const status = await client.getClusterStatus();
 
     expect(status.serverCount).toBe(3);
     expect(status.healthyServerCount).toBe(3);
-    expect(status.clusterName).toBeDefined();
+    expect(status.clusterName).toBe("osd-prod-gew1");
     expect(status.timestamp).toBeDefined();
-    expect(mockCallTool).toHaveBeenCalledWith(
-      "queryDruidSql",
-      { sqlQuery: expect.stringContaining("sys.servers") }
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("sys.servers")
     );
   });
 
-  it("getActiveTasks queries sys.tasks for RUNNING via MCP", async () => {
-    mockCallTool.mockResolvedValue([
+  it("getActiveTasks queries sys.tasks for RUNNING", async () => {
+    mockQuery.mockResolvedValue([
       {
         task_id: "index_wiki_2026-02-23",
         datasource: "wiki_edits",
@@ -60,25 +67,24 @@ describe("LiveDruidClient", () => {
       },
     ]);
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     const tasks = await client.getActiveTasks();
 
     expect(tasks).toHaveLength(1);
     expect(tasks[0].taskId).toBe("index_wiki_2026-02-23");
     expect(tasks[0].datasource).toBe("wiki_edits");
     expect(tasks[0].status).toBe("RUNNING");
-    expect(mockCallTool).toHaveBeenCalledWith(
-      "queryDruidSql",
-      { sqlQuery: expect.stringContaining("RUNNING") }
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("RUNNING")
     );
   });
 
-  it("getSegmentHealth queries sys.segments grouped by datasource via MCP", async () => {
-    mockCallTool.mockResolvedValue([
+  it("getSegmentHealth queries sys.segments grouped by datasource", async () => {
+    mockQuery.mockResolvedValue([
       { datasource: "wiki_edits", segment_count: 200, total_size: 2000000000 },
     ]);
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     const segments = await client.getSegmentHealth();
 
     expect(segments).toHaveLength(1);
@@ -96,7 +102,7 @@ describe("LiveDruidClient", () => {
       .mockResolvedValueOnce(79)     // failed
       .mockResolvedValueOnce(2.4);   // avg time
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     const metrics = await client.getQueryMetrics({
       start: "2026-02-16",
       end: "2026-02-23",
@@ -125,7 +131,7 @@ describe("LiveDruidClient", () => {
       },
     ]);
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     const points = await client.getQueryVelocity();
 
     expect(points).toHaveLength(3);
@@ -144,7 +150,7 @@ describe("LiveDruidClient", () => {
   it("getQueryVelocity returns empty array when no data", async () => {
     mockRangeQuery.mockResolvedValue([]);
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     const points = await client.getQueryVelocity();
 
     expect(points).toEqual([]);
@@ -158,8 +164,8 @@ describe("LiveDruidClient", () => {
       .mockResolvedValueOnce(5)     // failed
       .mockResolvedValueOnce(500);  // avg time
 
-    // MCP calls: getSegmentHealth then getActiveTasks
-    mockCallTool
+    // Druid calls: getSegmentHealth then getActiveTasks
+    mockQuery
       .mockResolvedValueOnce([
         { datasource: "wiki_edits", segment_count: 200, total_size: 2000000000 },
       ])
@@ -174,21 +180,22 @@ describe("LiveDruidClient", () => {
         },
       ]);
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     const report = await client.getWeeklyReport({
       start: "2026-02-16",
       end: "2026-02-23",
     });
 
+    expect(report.clusterName).toBe("osd-prod-gew1");
     expect(report.reliabilityScore).toBe(95);
     expect(report.queryMetrics.totalQueries).toBe(100);
     expect(report.segmentHealth).toHaveLength(1);
   });
 
-  it("rejects when MCP call fails", async () => {
-    mockCallTool.mockRejectedValue(new Error("connection refused"));
+  it("rejects when Druid query fails", async () => {
+    mockQuery.mockRejectedValue(new Error("connection refused"));
 
-    const client = new LiveDruidClient();
+    const client = new LiveDruidClient(TEST_CONFIG);
     await expect(client.getClusterStatus()).rejects.toThrow(
       "connection refused"
     );

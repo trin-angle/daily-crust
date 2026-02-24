@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { MetricTile } from "@/components/MetricTile";
 import { QpsChart } from "@/components/QpsChart";
 import { IngestionList } from "@/components/IngestionList";
-import { RegionSelector } from "@/components/RegionSelector";
-import type { ClusterStatus, Task, QpsPoint, DruidRegion } from "@/lib/types";
+import { ClusterSelector } from "@/components/ClusterSelector";
+import type { ClusterStatus, Task, QpsPoint, DruidProduct, DruidRegion } from "@/lib/types";
 
 const POLL_INTERVAL = 15000;
 
@@ -21,21 +21,25 @@ export default function DashboardPage() {
   const [qps, setQps] = useState<QpsPoint[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [product, setProduct] = useState<DruidProduct>("music");
   const [region, setRegion] = useState<DruidRegion>("all");
 
   const fetchData = useCallback(async () => {
-    const params = region !== "all" ? `?region=${region}` : "";
+    const params = new URLSearchParams();
+    params.set("product", product);
+    if (region !== "all") params.set("region", region);
+    const qs = `?${params}`;
     const [statusRes, tasksRes, qpsRes] = await Promise.all([
-      fetch(`/api/cluster/status${params}`),
-      fetch(`/api/cluster/tasks${params}`),
-      fetch(`/api/cluster/qps${params}`),
+      fetch(`/api/cluster/status${qs}`),
+      fetch(`/api/cluster/tasks${qs}`),
+      fetch(`/api/cluster/qps${qs}`),
     ]);
     setStatus(await statusRes.json());
     setTasks(await tasksRes.json());
     setQps(await qpsRes.json());
     setLastUpdated(new Date());
     setSecondsAgo(0);
-  }, [region]);
+  }, [product, region]);
 
   useEffect(() => {
     fetchData();
@@ -56,8 +60,18 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold">Live Dashboard</h2>
-        <RegionSelector selected={region} onSelect={setRegion} />
+        <h2 className="text-lg font-bold">
+          Live Dashboard
+          <span className="ml-2 text-sm font-normal text-text-secondary">
+            {product === "music" ? "Music" : "Podcast"}
+          </span>
+        </h2>
+        <ClusterSelector
+          product={product}
+          region={region}
+          onProductChange={setProduct}
+          onRegionChange={setRegion}
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

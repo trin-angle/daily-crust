@@ -4,9 +4,9 @@ import type { DruidRegion } from "@/lib/types";
 
 const REGIONS: { value: DruidRegion; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "osd-prod-gew1", label: "GEW1" },
-  { value: "osd-prod-guc3", label: "GUC3" },
-  { value: "osd-prod-gae2", label: "GAE2" },
+  { value: "gew1", label: "GEW1" },
+  { value: "guc3", label: "GUC3" },
+  { value: "gew4", label: "GEW4" },
 ];
 
 interface RegionSelectorProps {

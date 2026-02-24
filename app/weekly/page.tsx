@@ -1,6 +1,7 @@
 import { createMCPClient } from "@/lib/mcp-client";
 import { WeeklyReportCard } from "@/components/WeeklyReportCard";
 import { ReliabilityScore } from "@/components/ReliabilityScore";
+import type { DruidProduct, DruidRegion } from "@/lib/types";
 
 function formatDuration(ms: number): string {
   const minutes = Math.floor(ms / 60000);
@@ -14,8 +15,16 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1_000).toFixed(1)} KB`;
 }
 
-export default async function WeeklyPage() {
-  const client = createMCPClient();
+interface WeeklyPageProps {
+  searchParams: Promise<{ product?: string; region?: string }>;
+}
+
+export default async function WeeklyPage({ searchParams }: WeeklyPageProps) {
+  const params = await searchParams;
+  const product = (params.product as DruidProduct) ?? "music";
+  const region = (params.region as DruidRegion) ?? "all";
+
+  const client = createMCPClient(undefined, product, region);
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const range = {
