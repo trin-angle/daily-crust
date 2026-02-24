@@ -2,10 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { LiveDruidClient } from "../live-client";
 
 const mockCallTool = vi.fn();
+const mockScalarValue = vi.fn();
+const mockRangeQuery = vi.fn();
 
 vi.mock("../druid-mcp-http-client", () => ({
   DruidMcpHttpClient: vi.fn().mockImplementation(() => ({
     callTool: mockCallTool,
+  })),
+}));
+
+vi.mock("../prometheus-client", () => ({
+  PrometheusClient: vi.fn().mockImplementation(() => ({
+    scalarValue: mockScalarValue,
+    rangeQuery: mockRangeQuery,
   })),
 }));
 
@@ -80,10 +89,12 @@ describe("LiveDruidClient", () => {
     expect(segments[0].needsCompaction).toBe(true);
   });
 
-  it("getQueryMetrics queries sys.tasks for date range via MCP", async () => {
-    mockCallTool.mockResolvedValue([
-      { total: 100, successful: 95, failed: 5, avg_duration: 500 },
-    ]);
+  it("getQueryMetrics fetches from Prometheus", async () => {
+    mockScalarValue
+      .mockResolvedValueOnce(18903)  // total
+      .mockResolvedValueOnce(18824)  // successful
+      .mockResolvedValueOnce(79)     // failed
+      .mockResolvedValueOnce(2.4);   // avg time
 
     const client = new LiveDruidClient();
     const metrics = await client.getQueryMetrics({
@@ -91,12 +102,48 @@ describe("LiveDruidClient", () => {
       end: "2026-02-23",
     });
 
-    expect(metrics.totalQueries).toBe(100);
-    expect(metrics.successfulQueries).toBe(95);
-    expect(metrics.failedQueries).toBe(5);
+    expect(metrics.totalQueries).toBe(18903);
+    expect(metrics.successfulQueries).toBe(18824);
+    expect(metrics.failedQueries).toBe(79);
+    expect(metrics.avgQueryTimeMs).toBe(2);
+    expect(mockScalarValue).toHaveBeenCalledTimes(4);
+    expect(mockScalarValue).toHaveBeenCalledWith(
+      expect.stringContaining("druid_query_count_total")
+    );
   });
 
-  it("getQueryVelocity returns empty array", async () => {
+  it("getQueryVelocity returns QPS time series from Prometheus", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    mockRangeQuery.mockResolvedValue([
+      {
+        metric: {},
+        values: [
+          [now - 120, "1.5"],
+          [now - 60, "2.3"],
+          [now, "1.8"],
+        ],
+      },
+    ]);
+
+    const client = new LiveDruidClient();
+    const points = await client.getQueryVelocity();
+
+    expect(points).toHaveLength(3);
+    expect(points[0].qps).toBe(1.5);
+    expect(points[1].qps).toBe(2.3);
+    expect(points[2].qps).toBe(1.8);
+    expect(points[0].timestamp).toBeDefined();
+    expect(mockRangeQuery).toHaveBeenCalledWith(
+      expect.stringContaining("druid_query_count_total"),
+      expect.any(Number),
+      expect.any(Number),
+      60
+    );
+  });
+
+  it("getQueryVelocity returns empty array when no data", async () => {
+    mockRangeQuery.mockResolvedValue([]);
+
     const client = new LiveDruidClient();
     const points = await client.getQueryVelocity();
 
@@ -104,25 +151,28 @@ describe("LiveDruidClient", () => {
   });
 
   it("getWeeklyReport aggregates metrics, segments, and tasks", async () => {
-    // First call: getQueryMetrics
-    mockCallTool.mockResolvedValueOnce([
-      { total: 100, successful: 95, failed: 5, avg_duration: 500 },
-    ]);
-    // Second call: getSegmentHealth
-    mockCallTool.mockResolvedValueOnce([
-      { datasource: "wiki_edits", segment_count: 200, total_size: 2000000000 },
-    ]);
-    // Third call: getActiveTasks
-    mockCallTool.mockResolvedValueOnce([
-      {
-        task_id: "index_wiki",
-        datasource: "wiki_edits",
-        status: "RUNNING",
-        created_time: "2026-02-23T10:00:00.000Z",
-        duration: 120000,
-        error_msg: null,
-      },
-    ]);
+    // Prometheus calls for getQueryMetrics
+    mockScalarValue
+      .mockResolvedValueOnce(100)   // total
+      .mockResolvedValueOnce(95)    // successful
+      .mockResolvedValueOnce(5)     // failed
+      .mockResolvedValueOnce(500);  // avg time
+
+    // MCP calls: getSegmentHealth then getActiveTasks
+    mockCallTool
+      .mockResolvedValueOnce([
+        { datasource: "wiki_edits", segment_count: 200, total_size: 2000000000 },
+      ])
+      .mockResolvedValueOnce([
+        {
+          task_id: "index_wiki",
+          datasource: "wiki_edits",
+          status: "RUNNING",
+          created_time: "2026-02-23T10:00:00.000Z",
+          duration: 120000,
+          error_msg: null,
+        },
+      ]);
 
     const client = new LiveDruidClient();
     const report = await client.getWeeklyReport({

@@ -12,20 +12,26 @@ import type {
 } from "./types";
 import type { DruidMCPClient } from "./mcp-client";
 import { DruidMcpHttpClient } from "./druid-mcp-http-client";
+import { PrometheusClient } from "./prometheus-client";
 
 interface LiveClientConfig {
   mcpUrl?: string;
+  prometheusUrl?: string;
 }
 
 export class LiveDruidClient implements DruidMCPClient {
   private mcp: DruidMcpHttpClient;
+  private prom: PrometheusClient;
 
   constructor(config?: LiveClientConfig) {
-    const url =
+    const mcpUrl =
       config?.mcpUrl ??
       process.env.DRUID_MCP_URL ??
       "http://localhost:9090/mcp";
-    this.mcp = new DruidMcpHttpClient({ url });
+    this.mcp = new DruidMcpHttpClient({ url: mcpUrl });
+    this.prom = new PrometheusClient({
+      url: config?.prometheusUrl ?? process.env.PROMETHEUS_URL ?? "http://localhost:9092",
+    });
   }
 
   private async sql(query: string): Promise<any[]> {
@@ -74,19 +80,23 @@ export class LiveDruidClient implements DruidMCPClient {
   }
 
   async getQueryMetrics(
-    range: DateRange,
+    _range: DateRange,
     _region?: DruidRegion
   ): Promise<QueryMetrics> {
-    const rows = await this.sql(
-      `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) as successful, SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed, AVG(duration) as avg_duration FROM sys.tasks WHERE created_time >= '${range.start}' AND created_time <= '${range.end}'`
-    );
-    const r = rows[0] ?? { total: 0, successful: 0, failed: 0, avg_duration: 0 };
+    const [total, successful, failed, avgTime] = await Promise.all([
+      this.prom.scalarValue("sum(druid_query_count_total)"),
+      this.prom.scalarValue("sum(druid_query_success_count_total)"),
+      this.prom.scalarValue("sum(druid_query_failed_count_total)"),
+      this.prom.scalarValue(
+        "sum(druid_query_time_sum) / sum(druid_query_time_count)"
+      ),
+    ]);
 
     return {
-      totalQueries: r.total,
-      successfulQueries: r.successful,
-      failedQueries: r.failed,
-      avgQueryTimeMs: Math.round(r.avg_duration ?? 0),
+      totalQueries: Math.round(total),
+      successfulQueries: Math.round(successful),
+      failedQueries: Math.round(failed),
+      avgQueryTimeMs: Math.round(avgTime),
       queriesOverSla: 0,
       slaThresholdMs: 1000,
     };
@@ -116,7 +126,22 @@ export class LiveDruidClient implements DruidMCPClient {
   }
 
   async getQueryVelocity(_region?: DruidRegion): Promise<QpsPoint[]> {
-    return [];
+    const now = Math.floor(Date.now() / 1000);
+    const oneHourAgo = now - 3600;
+
+    const results = await this.prom.rangeQuery(
+      "sum(rate(druid_query_count_total[1m]))",
+      oneHourAgo,
+      now,
+      60
+    );
+
+    if (results.length === 0) return [];
+
+    return results[0].values.map(([ts, val]) => ({
+      timestamp: new Date(ts * 1000).toISOString(),
+      qps: parseFloat(parseFloat(val).toFixed(2)),
+    }));
   }
 
   async getWeeklyReport(
